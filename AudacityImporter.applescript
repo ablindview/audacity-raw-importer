@@ -123,6 +123,10 @@ on run
                 as critical
         else if cmdResult contains "NOFILES" then
             display alert "No valid file paths were found." as warning
+        else if cmdResult contains "SOXERR:" then
+            display alert "Audio Conversion Failed" ¬
+                message "Could not convert a raw file to WAV: " & cmdResult ¬
+                as critical
         else if cmdResult contains "AUDERR:" then
             display alert "Audacity Reported an Error" ¬
                 message "Audacity said: " & cmdResult & return & return & ¬
