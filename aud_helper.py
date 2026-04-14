@@ -38,32 +38,52 @@ def main():
     time.sleep(2)
 
     # Import each raw file as a new track
+    # Encoding: Signed 32-bit PCM, default endianness, mono, 44100 Hz
     for path in files:
         send(tp, fp,
-            'ImportRaw: Filename="' + path + '" Encoding="Signed 16-bit PCM" '
+            'ImportRaw: Filename="' + path + '" Encoding="Signed 32-bit PCM" '
             'ByteOrder="Default byte order" Channels=1 Rate=44100')
         time.sleep(1.5)
 
-    # If multiple files: align end-to-end, then mix down to one track
-    if len(files) > 1:
-        send(tp, fp, 'SelectAll:')
-        time.sleep(0.5)
-        send(tp, fp, 'Align_EndToEnd:')
-        time.sleep(0.5)
-        send(tp, fp, 'MixAndRender:')
-        time.sleep(3)
+    # Align tracks end-to-end then flatten to a single mono track
+    send(tp, fp, 'SelectAll:')
+    time.sleep(0.5)
+    send(tp, fp, 'Align_EndToEnd:')
+    time.sleep(0.5)
+    send(tp, fp, 'MixAndRender:')
+    time.sleep(3)
 
-    # Normalize
+    # Normalize (-1 dB peak, remove DC offset)
     send(tp, fp, 'SelectAll:')
     time.sleep(0.5)
     send(tp, fp, 'Normalize: PeakLevel=-1 ApplyGain=1 RemoveDcOffset=1 StereoIndependent=0')
     time.sleep(5)
 
-    # Amplify (default: bring peak to 0 dB)
+    # Amplify (bring peak to 0 dB)
     send(tp, fp, 'SelectAll:')
     time.sleep(0.5)
     send(tp, fp, 'Amplify:')
     time.sleep(5)
+
+    # Convert mono to stereo:
+    #   Duplicate the track, pan original hard-left, duplicate hard-right,
+    #   then MixAndRender — Audacity produces a stereo track from panned sources.
+    send(tp, fp, 'SelectAll:')
+    time.sleep(0.3)
+    send(tp, fp, 'Duplicate:')
+    time.sleep(1)
+    send(tp, fp, 'SelectTracks: Track=0 TrackCount=1')
+    time.sleep(0.3)
+    send(tp, fp, 'SetTrack: Pan=-1')
+    time.sleep(0.3)
+    send(tp, fp, 'SelectTracks: Track=1 TrackCount=1')
+    time.sleep(0.3)
+    send(tp, fp, 'SetTrack: Pan=1')
+    time.sleep(0.3)
+    send(tp, fp, 'SelectAll:')
+    time.sleep(0.3)
+    send(tp, fp, 'MixAndRender:')
+    time.sleep(3)
 
     # Set metadata tags
     send(tp, fp, 'Tags: artist="NFB of California" album="NFBCAL Convention 2026" year=2026')

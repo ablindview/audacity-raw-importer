@@ -9,7 +9,27 @@
 --   4. Click OK and restart Audacity
 -- ================================================================
 
+-- Prevent macOS from showing a system file-open dialog when the
+-- app is double-clicked (which would trigger an extra file picker).
+on open droppedFiles
+    -- Files dropped onto the app icon are ignored; use the run handler.
+end open
+
 on run
+
+    -- ── Locate the Python helper inside the app bundle ────────
+    set appPath to POSIX path of (path to me)
+    set helperPath to appPath & "Contents/Resources/aud_helper.py"
+
+    -- Verify the helper exists before doing anything else
+    set helperExists to do shell script "test -f " & quoted form of helperPath & " && echo yes || echo no"
+    if helperExists is not "yes" then
+        display alert "Installation Problem" ¬
+            message "The Python helper was not found inside the app bundle." & return & return & ¬
+            "Please rebuild the app using build.sh." ¬
+            as critical
+        return
+    end if
 
     -- ── Select RAW audio files ────────────────────────────────
     try
@@ -73,25 +93,18 @@ on run
         set isFirst to false
     end repeat
 
-    -- ── Write file list to temp path ──────────────────────────
+    -- ── Write file list to temp file ──────────────────────────
     set tmpList to "/tmp/aud_importer_files.txt"
-    set tmpPy to "/tmp/aud_importer.py"
 
     set fh to open for access POSIX file tmpList with write permission
     set eof of fh to 0
     write fileListText to fh
     close access fh
 
-    -- ── Decode embedded Python helper and write to temp ───────
-    -- The base64 below encodes the full Python Audacity scripting helper.
-    set b64 to "IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQgc3lzLCBvcywgdGltZQoKZGVmIHNlbmQodHAsIGZwLCBjbWQpOgogICAgd2l0aCBvcGVuKHRwLCAndycpIGFzIGY6CiAgICAgICAgZi53cml0ZShjbWQgKyAnXG4nKQogICAgcmVzcCA9IFtdCiAgICB3aXRoIG9wZW4oZnAsICdyJykgYXMgZjoKICAgICAgICBmb3IgbGluZSBpbiBmOgogICAgICAgICAgICBsaW5lID0gbGluZS5yc3RyaXAoJ1xuXHInKQogICAgICAgICAgICByZXNwLmFwcGVuZChsaW5lKQogICAgICAgICAgICBpZiBsaW5lID09ICdCYXRjaENvbW1hbmQgZmluaXNoZWQnOgogICAgICAgICAgICAgICAgYnJlYWsKICAgIHJldHVybiByZXNwCgpkZWYgbWFpbigpOgogICAgZmlsZV9saXN0X3BhdGggPSBzeXMuYXJndlsxXQogICAgcHJvamVjdF9uYW1lICAgPSBzeXMuYXJndlsyXQogICAgc2F2ZV9wYXRoICAgICAgPSBzeXMuYXJndlszXQoKICAgIHVpZCA9IHN0cihvcy5nZXR1aWQoKSkKICAgIHRwICA9ICcvdG1wL2F1ZGFjaXR5X3NjcmlwdF9waXBlLnRvLicgICArIHVpZAogICAgZnAgID0gJy90bXAvYXVkYWNpdHlfc2NyaXB0X3BpcGUuZnJvbS4nICsgdWlkCgogICAgaWYgbm90IG9zLnBhdGguZXhpc3RzKHRwKToKICAgICAgICBwcmludCgnTk9QSVBFJykKICAgICAgICByZXR1cm4KCiAgICB3aXRoIG9wZW4oZmlsZV9saXN0X3BhdGgpIGFzIGY6CiAgICAgICAgZmlsZXMgPSBbbGluZS5zdHJpcCgpIGZvciBsaW5lIGluIGYgaWYgbGluZS5zdHJpcCgpXQoKICAgIGlmIG5vdCBmaWxlczoKICAgICAgICBwcmludCgnTk9GSUxFUycpCiAgICAgICAgcmV0dXJuCgogICAgIyBOZXcgZW1wdHkgcHJvamVjdAogICAgc2VuZCh0cCwgZnAsICdOZXc6JykKICAgIHRpbWUuc2xlZXAoMikKCiAgICAjIEltcG9ydCBlYWNoIHJhdyBmaWxlIGFzIGEgbmV3IHRyYWNrCiAgICBmb3IgcGF0aCBpbiBmaWxlczoKICAgICAgICBzZW5kKHRwLCBmcCwKICAgICAgICAgICAgJ0ltcG9ydFJhdzogRmlsZW5hbWU9IicgKyBwYXRoICsgJyIgRW5jb2Rpbmc9IlNpZ25lZCAxNi1iaXQgUENNIiAnCiAgICAgICAgICAgICdCeXRlT3JkZXI9IkRlZmF1bHQgYnl0ZSBvcmRlciIgQ2hhbm5lbHM9MSBSYXRlPTQ0MTAwJykKICAgICAgICB0aW1lLnNsZWVwKDEuNSkKCiAgICAjIElmIG11bHRpcGxlIGZpbGVzOiBhbGlnbiBlbmQtdG8tZW5kLCB0aGVuIG1peCBkb3duIHRvIG9uZSB0cmFjawogICAgaWYgbGVuKGZpbGVzKSA+IDE6CiAgICAgICAgc2VuZCh0cCwgZnAsICdTZWxlY3RBbGw6JykKICAgICAgICB0aW1lLnNsZWVwKDAuNSkKICAgICAgICBzZW5kKHRwLCBmcCwgJ0FsaWduX0VuZFRvRW5kOicpCiAgICAgICAgdGltZS5zbGVlcCgwLjUpCiAgICAgICAgc2VuZCh0cCwgZnAsICdNaXhBbmRSZW5kZXI6JykKICAgICAgICB0aW1lLnNsZWVwKDMpCgogICAgIyBOb3JtYWxpemUKICAgIHNlbmQodHAsIGZwLCAnU2VsZWN0QWxsOicpCiAgICB0aW1lLnNsZWVwKDAuNSkKICAgIHNlbmQodHAsIGZwLCAnTm9ybWFsaXplOiBQZWFrTGV2ZWw9LTEgQXBwbHlHYWluPTEgUmVtb3ZlRGNPZmZzZXQ9MSBTdGVyZW9JbmRlcGVuZGVudD0wJykKICAgIHRpbWUuc2xlZXAoNSkKCiAgICAjIEFtcGxpZnkgKGRlZmF1bHQ6IGJyaW5nIHBlYWsgdG8gMCBkQikKICAgIHNlbmQodHAsIGZwLCAnU2VsZWN0QWxsOicpCiAgICB0aW1lLnNsZWVwKDAuNSkKICAgIHNlbmQodHAsIGZwLCAnQW1wbGlmeTonKQogICAgdGltZS5zbGVlcCg1KQoKICAgICMgU2V0IG1ldGFkYXRhIHRhZ3MKICAgIHNlbmQodHAsIGZwLCAnVGFnczogYXJ0aXN0PSJORkIgb2YgQ2FsaWZvcm5pYSIgYWxidW09Ik5GQkNBTCBDb252ZW50aW9uIDIwMjYiIHllYXI9MjAyNicpCiAgICB0aW1lLnNsZWVwKDEpCgogICAgIyBTYXZlIEF1ZGFjaXR5IHByb2plY3QgKC5hdXAzKQogICAgc2VuZCh0cCwgZnAsICdTYXZlUHJvamVjdDI6IEZpbGVuYW1lPSInICsgc2F2ZV9wYXRoICsgJyIgQWRkVG9IaXN0b3J5PTAnKQogICAgdGltZS5zbGVlcCgzKQoKICAgIHByaW50KCdET05FJykKCm1haW4oKQo="
-
-    do shell script "echo " & quoted form of b64 & " | base64 -d > " & quoted form of tmpPy
-
     -- ── Run the Python automation ─────────────────────────────
     try
         set cmdResult to do shell script ¬
-            "python3 " & quoted form of tmpPy & ¬
+            "python3 " & quoted form of helperPath & ¬
             " " & quoted form of tmpList & ¬
             " " & quoted form of projectName & ¬
             " " & quoted form of savePath
@@ -122,7 +135,7 @@ on run
 
     -- ── Clean up temp files ───────────────────────────────────
     try
-        do shell script "rm -f " & quoted form of tmpList & " " & quoted form of tmpPy
+        do shell script "rm -f " & quoted form of tmpList
     end try
 
 end run
