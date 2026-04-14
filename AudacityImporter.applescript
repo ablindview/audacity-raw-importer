@@ -9,19 +9,12 @@
 --   4. Click OK and restart Audacity
 -- ================================================================
 
--- Prevent macOS from showing a system file-open dialog when the
--- app is double-clicked (which would trigger an extra file picker).
-on open droppedFiles
-    -- Files dropped onto the app icon are ignored; use the run handler.
-end open
-
 on run
 
     -- ── Locate the Python helper inside the app bundle ────────
     set appPath to POSIX path of (path to me)
     set helperPath to appPath & "Contents/Resources/aud_helper.py"
 
-    -- Verify the helper exists before doing anything else
     set helperExists to do shell script "test -f " & quoted form of helperPath & " && echo yes || echo no"
     if helperExists is not "yes" then
         display alert "Installation Problem" ¬
@@ -32,11 +25,13 @@ on run
     end if
 
     -- ── Select RAW audio files ────────────────────────────────
+    -- This dialog appears exactly once. Select all the files you need here.
     try
         set rawFiles to choose file ¬
-            with prompt "Select the RAW audio data files to import. You may select multiple files." ¬
+            with prompt "Select ALL the RAW audio data files to import (you can select multiple at once):" ¬
             with multiple selections allowed
     on error
+        -- User cancelled
         return
     end try
 
@@ -74,15 +69,23 @@ on run
 
     set savePath to (POSIX path of saveFolder) & projectName
 
-    -- ── Open Audacity ─────────────────────────────────────────
+    -- ── Open Audacity and wait for it to be ready ─────────────
     tell application "Audacity" to activate
 
-    display dialog ¬
-        "Audacity is launching." & return & return & ¬
-        "Wait until Audacity shows an empty project window, then click Continue." ¬
-        with title "Waiting for Audacity" ¬
-        buttons {"Cancel", "Continue"} ¬
-        default button "Continue"
+    -- Give the user a clear instruction to NOT interact with Audacity.
+    -- The script will control it automatically.
+    try
+        display dialog ¬
+            "Audacity is now open." & return & return & ¬
+            "IMPORTANT: Do NOT click anything inside Audacity." & return & ¬
+            "The script will control it automatically." & return & return & ¬
+            "Wait until Audacity has fully loaded, then click Continue." ¬
+            with title "Waiting for Audacity — Do Not Touch It" ¬
+            buttons {"Cancel", "Continue"} ¬
+            default button "Continue"
+    on error
+        return
+    end try
 
     -- ── Build newline-separated file path list ────────────────
     set fileListText to ""
@@ -111,7 +114,7 @@ on run
 
         if cmdResult contains "NOPIPE" then
             display alert "Audacity Scripting Is Not Enabled" ¬
-                message "Complete this one-time setup:" & return & return & ¬
+                message "Complete this one-time setup in Audacity:" & return & return & ¬
                 "1. Open Audacity" & return & ¬
                 "2. Audacity menu → Preferences → Modules" & return & ¬
                 "3. Set 'mod-script-pipe' to Enabled" & return & ¬
@@ -120,6 +123,11 @@ on run
                 as critical
         else if cmdResult contains "NOFILES" then
             display alert "No valid file paths were found." as warning
+        else if cmdResult contains "AUDERR:" then
+            display alert "Audacity Reported an Error" ¬
+                message "Audacity said: " & cmdResult & return & return & ¬
+                "Please check that mod-script-pipe is enabled and Audacity is fully loaded before clicking Continue." ¬
+                as critical
         else
             display alert "Project Saved" ¬
                 message "'" & projectName & ".aup3' has been saved successfully." ¬
